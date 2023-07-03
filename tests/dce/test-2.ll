@@ -7,7 +7,7 @@ target triple = "x86_64-unknown-linux-gnu"
 
 @.str = private unnamed_addr constant [14 x i8] c"Hello world!\0A\00", align 1
 
-define dso_local i32 @main(i32 %argc, i8** %argv) {
+define dso_local i32 @main(i32 %argc, ptr %argv) {
 ; CHECK-LABEL: define dso_local i32 @main
 ; CHECK-SAME: (i32 [[ARGC:%.*]], ptr [[ARGV:%.*]]) {
 ; CHECK-NEXT:  cond.end:
@@ -28,11 +28,11 @@ cond.false:                                       ; preds = %entry
 
 cond.end:                                         ; preds = %cond.false, %cond.true
   %cond = phi i32 [ %mul, %cond.true ], [ %argc, %cond.false ]
-  %call = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([14 x i8], [14 x i8]* @.str, i64 0, i64 0))
+  %call = call i32 (ptr, ...) @printf(ptr @.str)
   ret i32 0
 }
 
-define dso_local i32 @main2(i32 %argc, i8** %argv) {
+define dso_local i32 @main2(i32 %argc, ptr %argv) {
 ; CHECK-LABEL: define dso_local i32 @main2
 ; CHECK-SAME: (i32 [[ARGC:%.*]], ptr [[ARGV:%.*]]) {
 ; CHECK-NEXT:  entry:
@@ -54,7 +54,7 @@ entry:
   br i1 %cmp, label %cond.true, label %cond.false
 
 cond.true:                                        ; preds = %entry
-  %unused = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([14 x i8], [14 x i8]* @.str, i64 0, i64 0))
+  %unused = call i32 (ptr, ...) @printf(ptr @.str)
   br label %cond.end
 
 cond.false:                                       ; preds = %entry
@@ -62,11 +62,11 @@ cond.false:                                       ; preds = %entry
 
 cond.end:                                         ; preds = %cond.false, %cond.true
   %cond = phi i32 [ %mul, %cond.true ], [ %argc, %cond.false ]
-  %call = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([14 x i8], [14 x i8]* @.str, i64 0, i64 0))
+  %call = call i32 (ptr, ...) @printf(ptr @.str)
   ret i32 0
 }
 
-define dso_local i32 @chain(i32 %argc, i8** %argv) {
+define dso_local i32 @chain(i32 %argc, ptr %argv) {
 ; CHECK-LABEL: define dso_local i32 @chain
 ; CHECK-SAME: (i32 [[ARGC:%.*]], ptr [[ARGV:%.*]]) {
 ; CHECK-NEXT:  [[LABEL:.*]]:
@@ -99,9 +99,9 @@ cond.chain.4:
 
 cond.end:                                         ; preds = %cond.false, %cond.true
   %cond = phi i32 [ %mul, %cond.true ], [ %argc, %cond.chain.4 ]
-  %call = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([14 x i8], [14 x i8]* @.str, i64 0, i64 0))
+  %call = call i32 (ptr, ...) @printf(ptr @.str)
   ret i32 0
 }
 
 
-declare dso_local i32 @printf(i8*, ...)
+declare dso_local i32 @printf(ptr, ...)

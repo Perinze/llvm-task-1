@@ -225,6 +225,50 @@ You must have LLVM 16, ninja, make, and CMake installed to build this on your lo
 The assignments will run `make dce` (dead-code-elimination) and `make memory-safety`.
 Make sure that this produces the correct files.
 
+### Installing LLVM 16
+
+On Debian-based systems, you can use the automatic LLVM installation script:
+
+```shell
+pip3 install lit
+wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && ./llvm.sh 16 clang opt
+
+# since the script installs the binaries with a version suffix, we create symlinks
+for i in clang opt llc FileCheck; do ln -s $(which $i-16) /usr/local/bin/$i; done
+```
+
+On macOS, you can use Homebrew:
+
+```shell
+pip3 install lit
+brew install llvm
+
+# link to the correct library paths so cmake can find them
+export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+export LDFLAGS="-L/opt/homebrew/opt/llvm/lib"
+export CPPFLAGS="-I/opt/homebrew/opt/llvm/include"
+```
+
+## Editor configuration
+
+### Clion
+
+Open the project folder in Clion. It should automatically detect the CMakeLists.txt files and configure the project.
+
+### VSCode
+
+Install the extension `ms-vscode.cpptools-extension-pack`.
+
+If the LLVM headers can't be opened: Ctrl+Shift+P -> `>C/C++: Edit Configurations (JSON)` -> Add LLVM include
+directories to `includePath`, e.g. when using the VSCode devcontainer:
+```
+"includePath": [
+    "${workspaceFolder}/**",
+    "/usr/include/llvm-16",
+    "/usr/include/llvm-c-16"
+],
+```
+
 ## Tests
 
 The tests run the subtests located in the `tests/` folder.

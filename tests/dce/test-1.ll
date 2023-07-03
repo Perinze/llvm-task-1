@@ -5,7 +5,7 @@
 source_filename = "simple-1.ll"
 target triple = "x86_64-unknown-linux-gnu"
 
-define dso_local i32 @main(i32 %argc, i8** %argv) {
+define dso_local i32 @main(i32 %argc, ptr %argv) {
 ; CHECK-LABEL: define dso_local i32 @main
 ; CHECK-SAME: (i32 [[ARGC:%.*]], ptr [[ARGV:%.*]]) {
 ; CHECK-NEXT:  entry:

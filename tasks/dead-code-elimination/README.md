@@ -1,17 +1,5 @@
 # LLVM Dead Code Elimination Pass
 
-## IDE
-
-### CLion
-
-Open `./CMakeLists.txt` as a project with CLion. CLion should start indexing LLVM's sources and provide autocompletion
-automatically.
-
-### VSCode
-
-VSCode does not provide autocompletion as it doesn't index LLVM's sources.
-<!-- TODO: find out how to fix that -->
-
 <!-- 
 Install the following extensions:
 
