@@ -20,9 +20,9 @@ rust: build_dir
 	cp target/release/libmemory_safety_runtime.a $(FINAL_RTLIB)
 
 cpp: cmake-build
-	cp build/libMemorySafetyRuntimeC.a $(FINAL_RTLIB)
-c: cmake-build
 	cp build/libMemorySafetyRuntimeCPP.a $(FINAL_RTLIB)
+c: cmake-build
+	cp build/libMemorySafetyRuntimeC.a $(FINAL_RTLIB)
 
 cmake-build: build_dir
 	cd build; cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..

@@ -33,7 +33,7 @@ build:
 
 .PHONY:
 build/%.out: build/%-san.ll
-	clang -g $< $(PASS_RTLIB) -o $@
+	$(CC) -lstdc++ -g $< $(PASS_RTLIB) -o $@
 
 # make sure the sanitized build step is _always_ executed
 .PHONY: build/%-san.ll
@@ -48,3 +48,4 @@ check: all
 	python3 test-malloc.py
 	python3 test-use-after-free.py
 	python3 test-stack.py
+	python3 test-performance.py
