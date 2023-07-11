@@ -311,6 +311,51 @@ namespace {
             }
         }
 
+        static bool eraseUselessStore(Function &F) {
+            errs() << "\nErasing store that are never loaded or passed" << F.getName() << "\n";
+
+            bool changed = false;
+
+            bool local_changed = false;
+
+            auto *BBList = &(F.getBasicBlockList());
+            for (auto BB = BBList->rbegin(), BBE = BBList->rend(); BB != BBE; ++BB) {
+                auto bb = &(*BB);
+                errs() << "Basic block: " << bb->getName() << "\n";
+
+                auto loadWithoutStore = std::set<Value*>();
+                auto toErase = std::set<StoreInst*>();
+                for (auto I = bb->rbegin(), IE = bb->rend(); I != IE; ++I) {
+                    auto inst = &(*I);
+                    errs() << "Inst: " << inst->getName() << "\n";
+
+                    // TODO: call instr, ret instr
+                    if (auto *LI = dyn_cast<LoadInst>(inst)) {
+                        errs() << "It's a load instr, record in list\n";
+                        loadWithoutStore.insert(LI->getOperand(0));
+                    } else if (auto *SI = dyn_cast<StoreInst>(inst)) {
+                        errs() << "It's a store instr, check if loaded\n";
+                        auto ptrOperand = SI->getOperand(1);
+                        if (loadWithoutStore.count(ptrOperand) > 0) {
+                            errs() << "It's loaded or passed, skipping\n";
+                        } else {
+                            errs() << "It's never loaded or passed away, adding to erase list\n";
+                            toErase.insert(SI);
+                        }
+                    }
+                }
+                for (auto *SI : toErase) {
+                    auto name = SI->getName();
+                    SI->eraseFromParent();
+                    errs() << name << " erased\n";
+                    changed = true;
+                }
+            }
+
+            errs() << "\nDone: erased store that are never loaded or passed" << F.getName() << "\n";
+            return changed;
+        }
+
         static void test(Function &F) {
             for (auto I = inst_begin(F), E = inst_end(F); I != E; ++I) {
                 auto inst = &(*I);
@@ -348,8 +393,8 @@ namespace {
         PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
             errs() << "Running DeadCodeEliminationPass on function " << F.getName() << "\n";
 
-            test(F);
-            return PreservedAnalyses::none();
+            //test(F);
+            //return PreservedAnalyses::none();
 
             bool changed = false;
             do {
@@ -358,8 +403,8 @@ namespace {
                 errs() << "\n\nFunction is now after simplification: \n" << F << "\n\n\n";
                 changed |= eraseTriviallyDeadInstruction(F);
                 errs() << "\n\nFunction is now after dce: \n" << F << "\n\n\n";
-                changed |= removeUselessStoreToStackSlot(F);
-                errs() << "\n\nFunction is now after dce: \n" << F << "\n\n\n";
+                changed |= eraseUselessStore(F);
+                errs() << "\n\nFunction is now after erase store: \n" << F << "\n\n\n";
             } while (changed);
 
             return PreservedAnalyses::none();
