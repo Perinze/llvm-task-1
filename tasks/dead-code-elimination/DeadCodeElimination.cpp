@@ -9,6 +9,8 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
+#include <optional>
+
 #define DEBUG_TYPE "remove-dead-code"
 
 using namespace llvm;
@@ -271,12 +273,50 @@ namespace {
             else return true;
         }
 
+        static bool eraseLoadStoreByEnv(Function &F) {
+            errs() << "\nErase useless load/store by precalculating env\n";
+
+            auto *BBList = &(F.getBasicBlockList());
+            for (auto BB = BBList->begin(), BBE = BBList->end(); BB != BBE; ++BB) {
+                auto bb = &(*BB);
+                errs() << "Basic block: " << bb->getName() << "\n";
+
+                auto env = ValueMap<Value*, std::optional<Value*>>();
+                for (auto I = BB->begin(), E = BB->end(); I != E; ++I) {
+                    auto inst = &(*I);
+                    errs() << "Instr: " << bb->getName() << "\n";
+
+                    if (auto *AI = dyn_cast<AllocaInst>(inst)) {
+                        errs() << "It's an alloca instr, adding nullopt to env\n";
+                        env[AI->getValueName()->getValue()] = std::nullopt;
+                    } else if (auto *SI = dyn_cast<AllocaInst>(inst)) {
+                        errs() << "It's a store instr, mapping 2nd operand to 1st operand in env\n";
+                        env[SI->getOperand(1)] = std::make_optional<Value*>(SI->getOperand(0));
+                    } else if (auto *LI = dyn_cast<AllocaInst>(inst)) {
+                        errs() << "It's a load instr, find if operand has an entry in env\n";
+                        auto it = env.find(SI->getOperand(0));
+                        if (it == env.end()) {
+                            errs() << "Not found, skipping\n";
+                        } else {
+                            errs() << "Found, check if entry value is nullopt\n";
+                            if (it->second.has_value()) {
+                                errs() << "It has value, transforming load instr to a simple assignment\n";
+
+                            } else {
+                                errs() << "It's only alloca but never stored, skipping\n";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         static void test(Function &F) {
             for (auto I = inst_begin(F), E = inst_end(F); I != E; ++I) {
                 auto inst = &(*I);
                 if (auto *AI = dyn_cast<AllocaInst>(inst)) {
                     errs() << "Is AllocaInst: " << *AI << "\n";
-                    errs() << "Value: " << AI->getValueName() << " : " << AI->getValueID() << "\n";
+                    errs() << "Value: " << AI->getValueName() << " with key " << AI->getValueName()->getKey() << " and value " << AI->getValueName()->getValue() << "\n";
                 } else if (auto *SI = dyn_cast<StoreInst>(inst)) {
                     errs() << "Is StoreInst: " << *SI << "\n";
                     auto n = SI->getNumOperands();
@@ -284,6 +324,7 @@ namespace {
                     for (auto i = 0U; i < n; ++i) {
                         errs() << "Operand " << i << ": " << SI->getOperand(i) << "\n";
                     }
+                    errs() << "Operand 0's value is " << SI->getOperand(0) << "\n";
                     if (auto *OpAI = dyn_cast<AllocaInst>(SI->getOperand(1))) {
                         errs() << "Operand 1 is a alloca inst\n";
                         errs() << "It's value name and id : " << OpAI->getValueName() << " " << OpAI->getValueID() << "\n";
@@ -307,8 +348,8 @@ namespace {
         PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
             errs() << "Running DeadCodeEliminationPass on function " << F.getName() << "\n";
 
-            //test(F);
-            //return PreservedAnalyses::none();
+            test(F);
+            return PreservedAnalyses::none();
 
             bool changed = false;
             do {
@@ -317,7 +358,8 @@ namespace {
                 errs() << "\n\nFunction is now after simplification: \n" << F << "\n\n\n";
                 changed |= eraseTriviallyDeadInstruction(F);
                 errs() << "\n\nFunction is now after dce: \n" << F << "\n\n\n";
-                //changed |= removeUselessStoreToStackSlot(F);
+                changed |= removeUselessStoreToStackSlot(F);
+                errs() << "\n\nFunction is now after dce: \n" << F << "\n\n\n";
             } while (changed);
 
             return PreservedAnalyses::none();
