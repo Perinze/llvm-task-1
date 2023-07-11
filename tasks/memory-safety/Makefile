@@ -6,7 +6,7 @@ all: cmake-build rtlib
 rtlib:
 	@echo "Uncomment one of the following lines to select your language"
 #rtlib: rust
-#rtlib: cpp
+rtlib: cpp
 #rtlib: c
 
 .PHONY clean:
