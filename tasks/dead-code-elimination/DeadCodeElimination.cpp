@@ -79,12 +79,16 @@ namespace {
             return changed;
         }
 
-        static void mergeSameSuccessor(BranchInst *BI) {
-            assert(BI->getSuccessor(0) == BI->getSuccessor(1));
+        static bool tryMergeSameSuccessor(BranchInst *BI) {
+            if (BI->getSuccessor(0) != BI->getSuccessor(1)) {
+                errs() << "Two successors of this branch instr differs, returning false\n";
+                return false;
+            }
             errs() << "\n" << *BI << "'s successors branch to the same basic blocks\n";
             auto newBI = BranchInst::Create(BI->getSuccessor(0));
             ReplaceInstWithInst(BI, newBI);
             errs() << "Replaced with unconditional branch instruction\n\n";
+            return true;
         }
 
         static bool simplifyConditionalBranch(Function &F) {
@@ -98,7 +102,7 @@ namespace {
                     if (auto *BI = dyn_cast<BranchInst>(inst)) {
                         if (BI->getNumSuccessors() == 2 and BI->getSuccessor(0) == BI->getSuccessor(1)) {
                             errs() << *BI << " has 2 same successors\n";
-                            mergeSameSuccessor(BI);
+                            tryMergeSameSuccessor(BI);
                             local_changed = true;
                             break;
                         }
@@ -180,18 +184,143 @@ namespace {
             return changed;
         }
 
-        static bool simplifyBasicBlock(Function &F) {
-            errs() << "Simplifying basic blocks in " << F.getName() << "\n";
+        static bool hasSameSuccessors(BranchInst *BI) {
+            if (BI->getNumSuccessors() != 2) {
+                errs() << "This branch is uncond\n";
+                return false;
+            }
+            return BI->getSuccessor(0) == BI->getSuccessor(1);
+        }
+
+        static bool simplifyOnlyUnconditionalBasicBlocks(Function &F) {
+            errs() << "\nFirst simplify only uncond BBs\n";
             bool changed = false;
-            bool local_changed = false;
-            do {
-                local_changed = false;
-                local_changed |= simplifySingleBranchBlock(F);
-                local_changed |= simplifyConditionalBranch(F);
-                if (local_changed) changed = true;
-                local_changed = false;
-            } while (local_changed);
-            errs() << "Done\n";
+
+            auto toSimplify = std::vector<std::pair<BranchInst*, char>>();
+            auto *BBList = &(F.getBasicBlockList());
+            for (auto BB = BBList->rbegin(), BBE = BBList->rend(); BB != BBE; ++BB) {
+                auto bb = &(*BB);
+                errs() << "Basic block: " << bb->getName() << "\n";
+
+                for (auto I = bb->rbegin(), IE = bb->rend(); I != IE; ++I) {
+                    auto inst = &(*I);
+                    errs() << "Inst: " << inst->getName() << "\n";
+
+                    if (auto *BI = dyn_cast<BranchInst>(inst)) {
+                        errs() << "It's a branch instr, checking its successors\n";
+
+                        auto n = BI->getNumSuccessors();
+                        auto code = 0U;
+                        for (auto i = 0U; i < n; i++) {
+                            auto sucBB = BI->getSuccessor(i);
+                            errs() << "Successor #" << i << ": " << sucBB->getName() << "\n";
+
+                            if (hasOneOnlyUnconditionalBranch(*sucBB)) {
+                                errs() << "It's a only uncond block, add it's predecessor to waiting for simplification\n";
+                                code |= (i+1); // if i==0 then 01 else 10, so code can be 00, 01, 10, 11
+                            }
+                        }
+                        if (code != 0) {
+                            toSimplify.push_back(std::make_pair(BI, code));
+                        }
+                    }
+                }
+            }
+            errs() << "Iteration done, now simplify all branch in the list\n";
+            for (auto p : toSimplify) {
+                auto BI = p.first;
+                auto code = p.second;
+                auto n = BI->getNumSuccessors();
+                errs() << "It's a branch instr with " << n << "successors, checking its successors\n";
+
+                for (auto i = 0U; i < n; i++) {
+                    // if code == 01, only successor 0 is merged
+                    // if code == 10, only successor 1 is merged
+                    // if code == 11, both successors are merged
+                    if (((i+1) & code) == 0) continue;
+                    auto sucBB = BI->getSuccessor(i);
+                    errs() << "Successor #" << i << ": " << sucBB->getName() << "\n";
+
+                    errs() << "Try to merge block into predecessor\n";
+                    auto sucBBName = sucBB->getName();
+                    bool local_changed = false;
+                    if (n == 1) {
+                        local_changed = MergeBlockIntoPredecessor(sucBB);
+                    } else if (n == 2) {
+                        local_changed = MergeBlockIntoPredecessor(sucBB, nullptr, nullptr, nullptr, nullptr, true);
+                    }
+                    if (local_changed) {
+                        errs() << "Successor " << sucBBName << " merged\n";
+                        changed = true;
+                    }
+                }
+                errs() << "Iterating successors done\n";
+            }
+            return changed;
+        }
+
+        static bool simplifySameSuccessorBranch(Function &F) {
+            errs() << "\nNext, simplifying branches that have the same successors\n";
+            bool changed = false;
+
+            auto toBeUncond = std::set<BranchInst*>();
+            auto *BBList = &(F.getBasicBlockList());
+            for (auto I = inst_begin(F), IE = inst_end(F); I != IE; ++I) {
+                auto inst = &(*I);
+                errs() << "Instr: " << inst << "\n";
+
+                if (auto *BI = dyn_cast<BranchInst>(inst)) {
+                    errs() << "It's a branch instr\n";
+
+                    if (hasSameSuccessors(BI)) {
+                        errs() << "Try to merge its 2 successors\n";
+                        toBeUncond.insert(BI);
+                    }
+                }
+            }
+            for (auto BI : toBeUncond) {
+                changed = changed || tryMergeSameSuccessor(BI);
+                errs() << "Successors of " << BI->getName() << " merged\n";
+            }
+            return changed;
+        }
+
+        static bool simplifyBasicBlock(Function &F) {
+            errs() << "\nSimplifying basic blocks in " << F.getName() << "\n";
+
+            bool changed = simplifyOnlyUnconditionalBasicBlocks(F);
+            changed = changed || simplifySameSuccessorBranch(F);
+
+            errs() << "Finally, check whether BBs can be simplified in case their successors is the next BB\n";
+            auto toErase = std::set<BasicBlock*>();
+            auto *BBList = &(F.getBasicBlockList());
+            for (auto BB = BBList->begin(), BBE = BBList->end(); BB != BBE; ++BB) {
+                auto bb = &(*BB);
+                errs() << "Basic block: " << bb->getName() << "\n";
+
+                auto BBNext = BB;
+                ++BBNext;
+                if (BBNext == BBE) {
+                    errs() << "It's the last BB, breaking\n";
+                    break;
+                }
+                auto bbNext = &(*BBNext);
+                errs() << "Next basic block: " << bbNext->getName() << "\n";
+
+                if (hasOneOnlyUnconditionalBranch(*bb) and bb->getUniqueSuccessor() == bbNext) {
+                    errs() << bb->getName() << "'s only successor is the next bb " << bbNext->getName() << "\n";
+                    errs() << "Add to erase list\n";
+                    toErase.insert(bb);
+                }
+            }
+            errs() << "Erase the BBs in the list\n";
+            for (auto BB : toErase) {
+                auto name = BB->getName();
+                BB->eraseFromParent();
+                errs() << "Erased " << name << "\n";
+            }
+
+            errs() << "Done: Simplified basic blocks in " << F.getName() << "\n";
             return changed;
         }
 
@@ -279,10 +408,11 @@ namespace {
             bool changed = false;
             do {
                 changed = false;
-                changed |= eraseTriviallyDeadInstruction(F);
                 changed |= simplifyBasicBlock(F);
-                changed |= removeUselessStoreToStackSlot(F);
-                changed = false;
+                errs() << "\n\nFunction is now after simplification: \n" << F << "\n\n\n";
+                changed |= eraseTriviallyDeadInstruction(F);
+                errs() << "\n\nFunction is now after dce: \n" << F << "\n\n\n";
+                //changed |= removeUselessStoreToStackSlot(F);
             } while (changed);
 
             return PreservedAnalyses::none();
