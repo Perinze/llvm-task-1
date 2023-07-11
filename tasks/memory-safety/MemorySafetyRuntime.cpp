@@ -19,7 +19,7 @@ static char __get_shadow(char *p);
 extern "C" {
 __attribute__((used))
 void __runtime_init() {
-    __shadow = (char*) malloc(__shadow_size);
+    __shadow = (char *) malloc(__shadow_size);
     memset(__shadow, -1, __shadow_size);
 }
 
@@ -42,7 +42,7 @@ void __runtime_check_addr(void *ptr, size_t size) {
 __attribute__((used))
 void *__runtime_malloc(size_t size) {
     auto padded_size = size + 32;
-    char *mem = (char*) malloc(padded_size);
+    char *mem = (char *) malloc(padded_size);
     char *ptr = mem + 16;
     for (char *p = mem; p < ptr; p += 8) {
         __set_shadow(p, -1);
@@ -52,7 +52,7 @@ void *__runtime_malloc(size_t size) {
         if (rest >= 8) {
             __set_shadow(p, 0);
         } else { // rest < 8
-            __set_shadow(p, (char)rest);
+            __set_shadow(p, (char) rest);
         }
     }
     for (char *p = mem; p < ptr; p += 8) {
@@ -63,7 +63,7 @@ void *__runtime_malloc(size_t size) {
 
 __attribute__((used))
 void __runtime_free(void *ptr) {
-    char *p = (char*)ptr;
+    char *p = (char *) ptr;
     char *mem = p - 16;
     while (__get_shadow(p) == 0) {
         __set_shadow(p, -1);
@@ -71,6 +71,7 @@ void __runtime_free(void *ptr) {
     }
     __set_shadow(p, -1);
     free(mem);
+}
 }
 
 static char *__mem_to_shadow(void *ptr) {
