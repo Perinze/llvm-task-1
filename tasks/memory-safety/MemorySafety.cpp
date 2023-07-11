@@ -57,6 +57,38 @@ namespace {
             builder.CreateCall(func);
         }
 
+        void addCheckBeforeStoreInst(StoreInst *SI) {
+            auto F = SI->getFunction();
+            DataLayout DL = F->getParent()->getDataLayout();
+            unsigned long size = DL.getTypeAllocSize(SI->getValueOperand()->getType());
+            errs() << "log: data size " << size << "\n";
+
+            LLVMContext &C = SI->getContext();
+            FunctionCallee func = F->getParent()->getOrInsertFunction(
+                    "__runtime_check_addr", Type::getVoidTy(C),
+                    Type::getInt8PtrTy(C), Type::getInt64Ty(C));
+
+            IRBuilder<> builder(SI);
+            builder.SetInsertPoint(SI);
+            builder.CreateCall(func);
+        }
+
+        void addCheckBeforeLoadInst(LoadInst *LI) {
+            auto F = LI->getFunction();
+            DataLayout DL = F->getParent()->getDataLayout();
+            unsigned long size = DL.getTypeAllocSize(LI->getType());
+            errs() << "log: data size " << size << "\n";
+
+            LLVMContext &C = LI->getContext();
+            FunctionCallee func = F->getParent()->getOrInsertFunction(
+                    "__runtime_check_addr", Type::getVoidTy(C),
+                    Type::getInt8PtrTy(C), Type::getInt64Ty(C));
+
+            IRBuilder<> builder(LI);
+            builder.SetInsertPoint(LI);
+            builder.CreateCall(func);
+        }
+
         void transform(Function &F) {
             if (F.getName() == "main") {
                 errs() << "It's main function, add init call\n";
@@ -71,6 +103,12 @@ namespace {
                         } else if (CI->getCalledFunction()->getName() == "free") {
                             transformFree(*CI);
                         }
+                    } else if (auto *SI = dyn_cast<StoreInst>(&I)) {
+                        errs() << "log: store instr" << *SI << "\n";
+                        addCheckBeforeStoreInst(SI);
+                    } else if (auto *LI = dyn_cast<LoadInst>(&I)) {
+                        errs() << "log: load instr" << *LI << "\n";
+                        addCheckBeforeLoadInst(LI);
                     }
                 }
             }
