@@ -99,16 +99,16 @@ namespace {
                     if (auto *CI = dyn_cast<CallInst>(&I)) {
                         errs() << "log: invoking function " << CI->getCalledFunction()->getName() << "\n";
                         if (CI->getCalledFunction()->getName() == "malloc") {
-                            transformMalloc(*CI);
+                            //transformMalloc(*CI);
                         } else if (CI->getCalledFunction()->getName() == "free") {
-                            transformFree(*CI);
+                            //transformFree(*CI);
                         }
                     } else if (auto *SI = dyn_cast<StoreInst>(&I)) {
                         errs() << "log: store instr" << *SI << "\n";
-                        addCheckBeforeStoreInst(SI);
+                        //addCheckBeforeStoreInst(SI);
                     } else if (auto *LI = dyn_cast<LoadInst>(&I)) {
                         errs() << "log: load instr" << *LI << "\n";
-                        addCheckBeforeLoadInst(LI);
+                        //addCheckBeforeLoadInst(LI);
                     }
                 }
             }

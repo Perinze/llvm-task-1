@@ -8,6 +8,8 @@
 #include <iostream>
 
 constexpr unsigned long long __shadow_size = 4294967296; // 4GB
+//constexpr unsigned long long __shadow_size = 4096; // 4KB
+
 char *__shadow = nullptr;
 
 static char *__mem_to_shadow(void *ptr);
