@@ -60,7 +60,7 @@ namespace {
         void addCheckBeforeStoreInst(StoreInst *SI) {
             auto F = SI->getFunction();
             DataLayout DL = F->getParent()->getDataLayout();
-            unsigned long size = DL.getTypeAllocSize(SI->getValueOperand()->getType());
+            auto size = DL.getTypeAllocSize(SI->getValueOperand()->getType());
             errs() << "log: data size " << size << "\n";
 
             LLVMContext &C = SI->getContext();
@@ -70,6 +70,7 @@ namespace {
 
             IRBuilder<> builder(SI);
             builder.SetInsertPoint(SI);
+            std::vector<Value*> args{SI->getOperand(1), size}; // TODO
             builder.CreateCall(func);
         }
 
