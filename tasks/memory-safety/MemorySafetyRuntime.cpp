@@ -24,27 +24,24 @@ static char __get_shadow(char *p);
 extern "C" {
 __attribute__((used))
 void __runtime_init() {
-    //__shadow = (char *) malloc(__shadow_size);
-    //fprintf(stderr, "log: shadow [%p, %p]\n", __shadow, __shadow + __shadow_size);
-    //memset(__shadow, -1, __shadow_size);
-    //fprintf(stderr, "log: memset -1\n");
 }
 
 __attribute__((used))
 void __runtime_cleanup() {
-    //fprintf(stderr, "log: shadow free\n");
+    fprintf(stderr, "log: shadow free\n");
     __shadow.clear();
 }
 
 __attribute__((used))
 void __runtime_check_addr(void *ptr, size_t size) {
-    //fprintf(stderr, "log: check addr %p %lu\n", ptr, size);
-    char *addr = __mem_to_shadow(ptr);
-    //fprintf(stderr, "log: shadow addr %p\n", addr);
-    char shadow_value = __get_shadow(addr);
-    //fprintf(stderr, "log: shadow value %u\n", (unsigned)shadow_value);
-    if (shadow_value) {
-        if (__slow_path_check(shadow_value, addr, size)) {
+    fprintf(stderr, "log: check addr %p %lu\n", ptr, size);
+    char shadow_value = __get_shadow((char*)ptr);
+    fprintf(stderr, "log: shadow value is %u\n", (unsigned)shadow_value);
+    if (shadow_value < 0) {
+        fprintf(stderr, "log: shadow value is negative\n");
+        __report_error();
+    } else if (shadow_value) {
+        if (__slow_path_check(shadow_value, (char*)ptr, size)) {
             __report_error();
         }
     }
@@ -52,27 +49,33 @@ void __runtime_check_addr(void *ptr, size_t size) {
 
 __attribute__((used))
 void *__runtime_malloc(size_t size) {
+    fprintf(stderr, "log: runtime malloc\n");
     char *mem = (char *) malloc(size);
     if (mem == nullptr) {
-        //fprintf(stderr, "log: malloc return nullptr\n");
+        fprintf(stderr, "log: malloc return nullptr\n");
     }
-    //fprintf(stderr, "log: mem %p\n", mem);
+    fprintf(stderr, "log: mem is at %p with size %u\n", mem, size);
+    fprintf(stderr, "log: end is %p\n", mem + size);
+    fprintf(stderr, "log: setting shadow\n");
     for (char *p = mem; p < mem + size; p += 8) {
+        fprintf(stderr, "log: current block is %p\n", p);
         auto rest = mem + size - p;
         if (rest >= 8) {
+            fprintf(stderr, "log: large enough, writing 0 to shadow\n");
             __set_shadow(p, 0);
         } else { // rest < 8
+            fprintf(stderr, "log: less than 8, writing %u to shadow\n", (unsigned)rest);
             __set_shadow(p, (char) rest);
         }
     }
-    //fprintf(stderr, "log: malloc wrapper return\n");
+    fprintf(stderr, "log: malloc wrapper return\n");
     return mem;
 }
 
 __attribute__((used))
 void __runtime_free(void *ptr) {
     char *p = (char *) ptr;
-    //fprintf(stderr, "log: ptr %p\n", ptr);
+    fprintf(stderr, "log: ptr %p\n", ptr);
     while (__get_shadow(p) == 0) {
         __set_shadow(p, -1);
         p += 8;
@@ -85,7 +88,7 @@ void __runtime_free(void *ptr) {
 }
 
 static char *__mem_to_shadow(void *ptr) {
-    //fprintf(stderr, "log: %p => %p\n", ptr, (char*)((unsigned long)ptr >> 3));
+    fprintf(stderr, "log: %p => %p\n", ptr, (char*)((unsigned long)ptr >> 3));
     return (char*)((unsigned long long)ptr >> 3);
 }
 
@@ -100,14 +103,18 @@ static void __report_error() {
 }
 
 static void __set_shadow(char *p, char shadow_value) {
+    fprintf(stderr, "log: set shadow %p by value %u\n", p, (unsigned)shadow_value);
     char *shadow_addr = __mem_to_shadow(p);
+    fprintf(stderr, "log: shadow entry is %p\n", p, shadow_addr);
     if (shadow_value < 0) {
+        fprintf(stderr, "log: shadow value is negative, so erase the entry %p\n", shadow_addr);
         __shadow.erase(shadow_addr);
-        //fprintf(stderr, "%p erased from map\n", shadow_addr);
+        fprintf(stderr, "log: %p erased from map\n", shadow_addr);
     } else {
         __shadow[shadow_addr] = shadow_value;
-        //fprintf(stderr, "%p <- %u\n", shadow_addr, (unsigned) shadow_value);
+        fprintf(stderr, "log: entry %p set to %u\n", shadow_addr, (unsigned) shadow_value);
     }
+    fprintf(stderr, "log: set shadow value done\n", p, (unsigned)shadow_value);
 }
 
 static char __get_shadow(char *p) {

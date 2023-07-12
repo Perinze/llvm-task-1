@@ -60,7 +60,7 @@ namespace {
         void addCheckBeforeStoreInst(StoreInst *SI) {
             auto F = SI->getFunction();
             DataLayout DL = F->getParent()->getDataLayout();
-            auto size = DL.getTypeAllocSize(SI->getValueOperand()->getType());
+            unsigned size = DL.getTypeAllocSize(SI->getValueOperand()->getType());
             errs() << "log: data size " << size << "\n";
 
             LLVMContext &C = SI->getContext();
@@ -70,8 +70,8 @@ namespace {
 
             IRBuilder<> builder(SI);
             builder.SetInsertPoint(SI);
-            std::vector<Value*> args{SI->getOperand(1), size}; // TODO
-            builder.CreateCall(func);
+            std::vector<Value*> args{SI->getOperand(1), ConstantInt::get(Type::getInt32Ty(C), size, false)};
+            builder.CreateCall(func, args);
         }
 
         void addCheckBeforeLoadInst(LoadInst *LI) {
@@ -87,6 +87,7 @@ namespace {
 
             IRBuilder<> builder(LI);
             builder.SetInsertPoint(LI);
+            std::vector<Value*> args{LI->getOperand(0), ConstantInt::get(Type::getInt32Ty(C), size, false)};
             builder.CreateCall(func);
         }
 
