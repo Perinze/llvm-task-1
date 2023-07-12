@@ -99,7 +99,7 @@ namespace {
                     if (auto *CI = dyn_cast<CallInst>(&I)) {
                         errs() << "log: invoking function " << CI->getCalledFunction()->getName() << "\n";
                         if (CI->getCalledFunction()->getName() == "malloc") {
-                            //transformMalloc(*CI);
+                            transformMalloc(*CI);
                         } else if (CI->getCalledFunction()->getName() == "free") {
                             //transformFree(*CI);
                         }

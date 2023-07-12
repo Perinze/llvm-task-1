@@ -22,18 +22,24 @@ extern "C" {
 __attribute__((used))
 void __runtime_init() {
     __shadow = (char *) malloc(__shadow_size);
+    fprintf(stderr, "log: shadow [%p, %p]\n", __shadow, __shadow + __shadow_size);
     memset(__shadow, -1, __shadow_size);
+    fprintf(stderr, "log: memset -1\n");
 }
 
 __attribute__((used))
 void __runtime_cleanup() {
+    fprintf(stderr, "log: shadow free\n");
     free(__shadow);
 }
 
 __attribute__((used))
 void __runtime_check_addr(void *ptr, size_t size) {
+    fprintf(stderr, "log: check addr %p %u\n", ptr, size);
     char *addr = __mem_to_shadow(ptr);
+    fprintf(stderr, "log: shadow addr %p\n", addr);
     char shadow_value = *addr;
+    fprintf(stderr, "log: shadow value %u\n", (unsigned)shadow_value);
     if (shadow_value) {
         if (__slow_path_check(shadow_value, addr, size)) {
             __report_error();
@@ -44,8 +50,13 @@ void __runtime_check_addr(void *ptr, size_t size) {
 __attribute__((used))
 void *__runtime_malloc(size_t size) {
     auto padded_size = size + 32;
+    fprintf(stderr, "log: padded size %u\n", padded_size);
     char *mem = (char *) malloc(padded_size);
+    if (mem == nullptr) {
+        fprintf(stderr, "log: malloc return nullptr\n");
+    }
     char *ptr = mem + 16;
+    fprintf(stderr, "log: ptr %p mem %p\n", ptr, mem);
     for (char *p = mem; p < ptr; p += 8) {
         __set_shadow(p, -1);
     }
@@ -60,6 +71,7 @@ void *__runtime_malloc(size_t size) {
     for (char *p = mem; p < ptr; p += 8) {
         __set_shadow(p, -1);
     }
+    fprintf(stderr, "log: malloc wrapper return\n");
     return ptr;
 }
 
@@ -67,6 +79,7 @@ __attribute__((used))
 void __runtime_free(void *ptr) {
     char *p = (char *) ptr;
     char *mem = p - 16;
+    fprintf(stderr, "log: ptr %p mem %p\n", ptr, mem);
     while (__get_shadow(p) == 0) {
         __set_shadow(p, -1);
         p += 8;
@@ -77,6 +90,7 @@ void __runtime_free(void *ptr) {
 }
 
 static char *__mem_to_shadow(void *ptr) {
+    fprintf(stderr, "log: %p => %p\n", ptr, (__shadow + ((unsigned long)ptr >> 3)));
     return (char*)(__shadow + ((unsigned long long)ptr >> 3));
 }
 
@@ -86,12 +100,13 @@ static bool __slow_path_check(char shadow_value, char *addr, size_t k) {
 }
 
 static void __report_error() {
-    std::cerr << "Illegal memory access\n";
+    fprintf(stderr, "Illegal memory access\n");
 }
 
 static void __set_shadow(char *p, char shadow_value) {
     char *shadow_addr = __mem_to_shadow(p);
     *shadow_addr = shadow_value;
+    fprintf(stderr, "%p <- %u\n", shadow_addr, (unsigned)shadow_value);
 }
 
 static char __get_shadow(char *p) {
