@@ -15,6 +15,7 @@
 //char *__shadow = nullptr;
 
 std::map<char*, char> __shadow;
+constexpr unsigned long BLKSIZ = 1 << 7;
 
 static char *__mem_to_shadow(void *ptr);
 static bool __slow_path_check(char shadow_value, char *addr, size_t k);
@@ -63,14 +64,14 @@ void __runtime_stack_alloc(void *ptr, size_t size) {
     log("log: mem is at %p with size %u\n", ptr, size);
     log("log: end is %p\n", (char*)ptr + size);
     log("log: setting shadow\n");
-    for (char *p = (char*)ptr; p < (char*)ptr + size; p += 8) {
+    for (char *p = (char*)ptr; p < (char*)ptr + size; p += BLKSIZ) {
         log("log: current block is %p\n", p);
         auto rest = (char*)ptr + size - p;
-        if (rest >= 8) {
+        if (rest >= BLKSIZ) {
             log("log: large enough, writing 0 to shadow\n");
             __set_shadow(p, 0);
-        } else { // rest < 8
-            log("log: less than 8, writing %u to shadow\n", (unsigned)rest);
+        } else { // rest < BLKSIZ
+            log("log: less than BLKSIZ, writing %u to shadow\n", (unsigned)rest);
             __set_shadow(p, (char) rest);
         }
     }
@@ -87,14 +88,14 @@ void *__runtime_malloc(size_t size) {
     log("log: mem is at %p with size %u\n", mem, size);
     log("log: end is %p\n", mem + size);
     log("log: setting shadow\n");
-    for (char *p = mem; p < mem + size; p += 8) {
+    for (char *p = mem; p < mem + size; p += BLKSIZ) {
         log("log: current block is %p\n", p);
         auto rest = mem + size - p;
-        if (rest >= 8) {
+        if (rest >= BLKSIZ) {
             log("log: large enough, writing 0 to shadow\n");
             __set_shadow(p, 0);
-        } else { // rest < 8
-            log("log: less than 8, writing %u to shadow\n", (unsigned)rest);
+        } else { // rest < BLKSIZ
+            log("log: less than BLKSIZ, writing %u to shadow\n", (unsigned)rest);
             __set_shadow(p, (char) rest);
         }
     }
@@ -108,7 +109,7 @@ void __runtime_free(void *ptr) {
     log("log: ptr %p\n", ptr);
     while (__get_shadow(p) == 0) {
         __set_shadow(p, -1);
-        p += 8;
+        p += BLKSIZ;
     }
     if (__get_shadow(p) > 0) {
         __set_shadow(p, -1);
@@ -123,7 +124,7 @@ static char *__mem_to_shadow(void *ptr) {
 }
 
 static bool __slow_path_check(char shadow_value, char *addr, size_t k) {
-    auto last_access_byte = ((unsigned long long)addr & 7) + k - 1;
+    auto last_access_byte = ((unsigned long long)addr & (BLKSIZ - 1)) + k - 1;
     return last_access_byte >= shadow_value;
 }
 
