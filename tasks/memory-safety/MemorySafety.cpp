@@ -119,18 +119,11 @@ namespace {
             errs() << "debug: arg ptr : " << argPtr << "\n";
             auto argSize = ConstantInt::get(Type::getInt32Ty(C), size, false);
             std::vector<Value*> args{argPtr, argSize};
-            //auto CI = builder.CreateCall(func, args);
-            //CI->insertAfter(AI);
             auto *CI = CallInst::Create(func, args, "", AI->getNextNode());
             errs() << "log: call to runtime stack alloc is inserted after alloca instr\n";
         }
 
-        void transform(Function &F) {
-            if (F.getName() == "main") {
-                errs() << "It's main function, add init call\n";
-                addInit(F);
-            }
-
+        std::set<Value*> initIgnoreList(Function &F) {
             auto ignoreList = std::set<Value*>();
             auto globals = F.getParent()->globals();
             errs() << "test: get globals\n";
@@ -144,15 +137,22 @@ namespace {
                 errs() << "It's main function, adding argv to ignore list\n";
                 auto argv = F.getArg(1);
                 ignoreList.insert(argv);
-                //errs() << "test: argv users\n";
-                //for (auto U : argv->users()) {
-                //    errs() << U << "\n";
-                //}
             }
+
             errs() << "test: global ignore list\n";
             for (auto v : ignoreList) {
                 errs() << v << "\n";
             }
+            return ignoreList;
+        }
+
+        void transform(Function &F) {
+            if (F.getName() == "main") {
+                errs() << "It's main function, add init call\n";
+                addInit(F);
+            }
+            auto ignoreList = initIgnoreList(F);
+
             for (auto &B : F) {
                 for (auto &I : B) {
                     if (auto *CI = dyn_cast<CallInst>(&I)) {
