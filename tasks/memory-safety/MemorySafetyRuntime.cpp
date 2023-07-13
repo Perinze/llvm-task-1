@@ -34,10 +34,6 @@ void __runtime_cleanup() {
 
 __attribute__((used))
 void __runtime_check_addr(void *ptr, size_t size) {
-    if (ptr == stdin or ptr == stdout or ptr == stderr) {
-        fprintf(stderr, "ptr is stdin|stdout|stderr, skipping\n");
-        return;
-    }
     fprintf(stderr, "log: check addr %p %lu\n", ptr, size);
     char shadow_value = __get_shadow((char*)ptr);
     fprintf(stderr, "log: shadow value is %u\n", (unsigned)shadow_value);
