@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <unordered_map>
 #include <cstdarg>
 
 //constexpr unsigned long long __shadow_size = 4294967296; // 4GB
@@ -15,7 +16,8 @@
 //char *__shadow = nullptr;
 
 std::map<char*, char> __shadow;
-constexpr unsigned long BLKSIZ = 1 << 2;
+constexpr unsigned long BITSHIFT = 7;
+constexpr unsigned long BLKSIZ = 1 << BITSHIFT;
 
 static char *__mem_to_shadow(void *ptr);
 static bool __slow_path_check(char shadow_value, char *addr, size_t k);
@@ -119,8 +121,8 @@ void __runtime_free(void *ptr) {
 }
 
 static char *__mem_to_shadow(void *ptr) {
-    //log("//log: %p => %p\n", ptr, (char*)((unsigned long)ptr >> 3));
-    return (char*)((unsigned long long)ptr >> 3);
+    //log("//log: %p => %p\n", ptr, (char*)((unsigned long)ptr >> BITSHIFT));
+    return (char*)((unsigned long long)ptr >> BITSHIFT);
 }
 
 static bool __slow_path_check(char shadow_value, char *addr, size_t k) {
@@ -139,7 +141,10 @@ static void __set_shadow(char *p, char shadow_value) {
     //log("//log: shadow entry is %p\n", p, shadow_addr);
     if (shadow_value < 0) {
         //log("//log: shadow value is negative, so erase the entry %p\n", shadow_addr);
-        __shadow.erase(shadow_addr);
+
+        //__shadow.erase(shadow_addr);
+        __shadow[shadow_addr] = shadow_value;
+
         //log("//log: %p erased from map\n", shadow_addr);
     } else {
         __shadow[shadow_addr] = shadow_value;
@@ -150,10 +155,11 @@ static void __set_shadow(char *p, char shadow_value) {
 
 static char __get_shadow(char *p) {
     char *shadow_addr = __mem_to_shadow(p);
-    if (__shadow.find(shadow_addr) == __shadow.end()) {
+    auto it = __shadow.find(shadow_addr);
+    if (it == __shadow.end()) {
         return -1;
     } else {
-        return __shadow[shadow_addr];
+        return it->second;
     }
 }
 
