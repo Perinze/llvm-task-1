@@ -4,32 +4,25 @@
 /// to change if it doesn't fit your needs or ideas.
 
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
-#include <map>
-#include <unordered_map>
-#include <cstdarg>
+#include <sys/mman.h>
+#include <stdarg.h>
 
-//constexpr unsigned long long __shadow_size = 4294967296; // 4GB
-//constexpr unsigned long long __shadow_size = 4096; // 4KB
+constexpr unsigned long __shadow_size = 0x7fffffffffff >> 3;
+char* __shadow = nullptr;
 
-//char *__shadow = nullptr;
-
-std::map<char*, char> __shadow;
-constexpr unsigned long BITSHIFT = 7;
-constexpr unsigned long BLKSIZ = 1 << BITSHIFT;
 
 static char *__mem_to_shadow(void *ptr);
-static bool __slow_path_check(char shadow_value, char *addr, size_t k);
+static bool __slow_path_check(char *addr, size_t k);
 static void __report_error();
-static void __set_shadow(char *p, char shadow_value);
-static char __get_shadow(char *p);
+static void __set_shadow(char *ptr, size_t len, bool valid);
 
+#define DEBUG
 void log(const char *format, ...) {
 #ifdef DEBUG
     va_list args;
     va_start(args, format);
-    v//log(format, args);
+    vfprintf(stderr, format, args);
     va_end(args);
 #endif
 }
@@ -37,97 +30,90 @@ void log(const char *format, ...) {
 extern "C" {
 __attribute__((used))
 void __runtime_init() {
+    log("runtime init\n");
+    __shadow = (char*)mmap(nullptr, __shadow_size, PROT_WRITE | PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    log("shadow mem %p\n", __shadow);
 }
 
 __attribute__((used))
 void __runtime_cleanup() {
-    //log("//log: shadow free\n");
-    //__shadow.clear();
+    log("runtime cleanup\n");
+    munmap(__shadow, __shadow_size);
 }
 
 __attribute__((used))
 void __runtime_check_addr(void *ptr, size_t size) {
-    //log("//log: check addr %p %lu\n", ptr, size);
-    char shadow_value = __get_shadow((char*)ptr);
-    //log("//log: shadow value is %u\n", (unsigned)shadow_value);
-    if (shadow_value < 0) {
-        //log("//log: shadow value is negative\n");
+    log("runtime check addr\n");
+    if (!__slow_path_check((char*)ptr, size)) {
         __report_error();
-    } else if (shadow_value) {
-        if (__slow_path_check(shadow_value, (char*)ptr, size)) {
-            __report_error();
-        }
     }
 }
 
 __attribute__((used))
-void __runtime_stack_alloc(void *ptr, size_t size) {
+void *__runtime_stack_alloc(void *ptr, size_t size, size_t pad) {
+    log("runtime stack alloc\n");
     //log("//log: runtime stack alloc\n");
     //log("//log: mem is at %p with size %u\n", ptr, size);
     //log("//log: end is %p\n", (char*)ptr + size);
     //log("//log: setting shadow\n");
-    for (char *p = (char*)ptr; p < (char*)ptr + size; p += BLKSIZ) {
-        //log("//log: current block is %p\n", p);
-        auto rest = (char*)ptr + size - p;
-        if (rest >= BLKSIZ) {
-            //log("//log: large enough, writing 0 to shadow\n");
-            __set_shadow(p, 0);
-        } else { // rest < BLKSIZ
-            //log("//log: less than BLKSIZ, writing %u to shadow\n", (unsigned)rest);
-            __set_shadow(p, (char) rest);
-        }
-    }
+    char *pad_low = (char*)ptr;
+    auto mem = pad_low + pad;
+    auto pad_up = pad_low + pad + size;
+    __set_shadow(pad_low, pad, false);
+    __set_shadow(mem, size, true);
+    __set_shadow(pad_up, pad, false);
     //log("//log: stack alloc wrapper return\n");
+    return mem;
 }
 
 __attribute__((used))
 void *__runtime_malloc(size_t size) {
-    //log("//log: runtime malloc\n");
-    char *mem = (char *) malloc(size);
+    log("runtime malloc\n");
+    size = (size + 7) & (~7);
+    auto padded_size = size + 64;
+    char *mem = (char *) malloc(padded_size);
     //if (mem == nullptr) {
     //    //log("//log: malloc return nullptr\n");
     //}
     //log("//log: mem is at %p with size %u\n", mem, size);
     //log("//log: end is %p\n", mem + size);
     //log("//log: setting shadow\n");
-    for (char *p = mem; p < mem + size; p += BLKSIZ) {
-        //log("//log: current block is %p\n", p);
-        auto rest = mem + size - p;
-        if (rest >= BLKSIZ) {
-            //log("//log: large enough, writing 0 to shadow\n");
-            __set_shadow(p, 0);
-        } else { // rest < BLKSIZ
-            //log("//log: less than BLKSIZ, writing %u to shadow\n", (unsigned)rest);
-            __set_shadow(p, (char) rest);
-        }
-    }
+    auto begin = mem;
+    auto mid = mem + 32;
+    auto ed = mem + padded_size - 32;
+    __set_shadow(begin, 32, false);
+    __set_shadow(mid, size, true);
+    __set_shadow(ed, 32, false);
+    *begin = size;
     //log("//log: malloc wrapper return\n");
-    return mem;
+    return mid;
 }
 
 __attribute__((used))
 void __runtime_free(void *ptr) {
-    char *p = (char *) ptr;
-    //log("//log: ptr %p\n", ptr);
-    while (__get_shadow(p) == 0) {
-        __set_shadow(p, -1);
-        p += BLKSIZ;
-    }
-    if (__get_shadow(p) > 0) {
-        __set_shadow(p, -1);
-    }
-    free(ptr);
+    log("runtime free\n");
+    auto begin = ((char*)ptr - 32);
+    auto size = *begin;
+    __set_shadow((char*)ptr, size, false);
 }
 }
 
 static char *__mem_to_shadow(void *ptr) {
-    //log("//log: %p => %p\n", ptr, (char*)((unsigned long)ptr >> BITSHIFT));
-    return (char*)((unsigned long long)ptr >> BITSHIFT);
+    log("mem to shadow\n");
+    return __shadow + ((size_t)ptr >> 3);
 }
 
-static bool __slow_path_check(char shadow_value, char *addr, size_t k) {
-    auto last_access_byte = ((unsigned long long)addr & (BLKSIZ - 1)) + k - 1;
-    return last_access_byte >= shadow_value;
+static bool __slow_path_check(char *addr, size_t k) {
+    log("slow path check\n");
+    auto shadow_addr = __mem_to_shadow(addr);
+    auto shadow_value = *shadow_addr;
+    if (shadow_value == 0) {
+        return true;
+    } else if (k < 8) {
+        return ((size_t)addr & 7) + k <= shadow_value;
+    } else {
+        return false;
+    }
 }
 
 static void __report_error() {
@@ -135,32 +121,37 @@ static void __report_error() {
     exit(1);
 }
 
-static void __set_shadow(char *p, char shadow_value) {
+static void __set_shadow(char *ptr, size_t len, bool valid) {
+    log("set shadow\n");
     //log("//log: set shadow %p by value %u\n", p, (unsigned)shadow_value);
-    char *shadow_addr = __mem_to_shadow(p);
+    auto shadow_addr = __mem_to_shadow(ptr);
     //log("//log: shadow entry is %p\n", p, shadow_addr);
-    if (shadow_value < 0) {
-        //log("//log: shadow value is negative, so erase the entry %p\n", shadow_addr);
+    log("filling blk\n");
+    size_t i = 0;
+    while (len >= 8 and i <= len - 8) {
+        char shadow_value;
+        if (valid) shadow_value = 0;
+        else shadow_value = -1;
+        log("blk: %p\n", shadow_addr + (i >> 3));
+        *(shadow_addr + (i >> 3)) = shadow_value;
+        i += 8;
+    }
 
-        //__shadow.erase(shadow_addr);
-        __shadow[shadow_addr] = shadow_value;
-
-        //log("//log: %p erased from map\n", shadow_addr);
-    } else {
-        __shadow[shadow_addr] = shadow_value;
-        //log("//log: entry %p set to %u\n", shadow_addr, (unsigned) shadow_value);
+    log("after filling blk\n");
+    while (i < len) {
+        auto ind = i >> 3;
+        char bit = i & 7;
+        auto shadow_value = *(shadow_addr + ind);
+        char new_shadow_value;
+        if (valid) {
+            new_shadow_value = shadow_value & !(1 << bit);
+        } else {
+            new_shadow_value = shadow_value | (1 << bit);
+        }
+        *(shadow_addr + ind) = new_shadow_value;
+        i++;
     }
     //log("//log: set shadow value done\n", p, (unsigned)shadow_value);
-}
-
-static char __get_shadow(char *p) {
-    char *shadow_addr = __mem_to_shadow(p);
-    auto it = __shadow.find(shadow_addr);
-    if (it == __shadow.end()) {
-        return -1;
-    } else {
-        return it->second;
-    }
 }
 
 #pragma clang diagnostic pop

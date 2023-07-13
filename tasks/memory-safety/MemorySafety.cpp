@@ -97,7 +97,7 @@ namespace {
             builder.CreateCall(func, args);
         }
 
-        void addCheckAfterAllocaInst(AllocaInst *AI) {
+        void addCheckAfterAllocaInst(AllocaInst *AI, std::set<AllocaInst*> &toDelete) {
             LLVMContext &C = AI->getContext();
             auto F = AI->getFunction();
             DataLayout DL = F->getParent()->getDataLayout();
@@ -106,9 +106,10 @@ namespace {
             unsigned long size = DL.getTypeAllocSize(AI->getAllocatedType());
             errs() << "log: alloca elem size " << size << "\n";
 
+            auto *sizeTy = DL.getIntPtrType(C);
             FunctionCallee func = F->getParent()->getOrInsertFunction(
-                    "__runtime_stack_alloc", Type::getVoidTy(C),
-                    Type::getInt8PtrTy(C), Type::getInt64Ty(C));
+                    "__runtime_stack_alloc", Type::getInt8PtrTy(C),
+                    Type::getInt8PtrTy(C), sizeTy, sizeTy);
 
             errs() << "log: ready to build call instr\n";
             IRBuilder<> builder(AI);
@@ -117,9 +118,16 @@ namespace {
             auto argPtr = AI;
             errs() << "debug: after ai get value name\n";
             errs() << "debug: arg ptr : " << argPtr << "\n";
-            auto argSize = ConstantInt::get(Type::getInt32Ty(C), size, false);
-            std::vector<Value*> args{argPtr, argSize};
+            auto argSize = ConstantInt::get(sizeTy, size, false);
+            auto padSize = ConstantInt::get(sizeTy, 32, false);
+
+            auto *newSize = builder.CreateAdd(ConstantInt::get(sizeTy, size), builder.CreateMul(padSize, ConstantInt::get(sizeTy, 2)));
+            auto *newAI = builder.CreateAlloca(Type::getInt8Ty(C), 0, newSize);
+
+            std::vector<Value*> args{newAI, argSize, padSize};
             auto *CI = CallInst::Create(func, args, "", AI->getNextNode());
+            AI->replaceAllUsesWith(CI);
+            toDelete.insert(AI);
             errs() << "log: call to runtime stack alloc is inserted after alloca instr\n";
         }
 
@@ -154,6 +162,7 @@ namespace {
             auto ignoreList = initIgnoreList(F);
 
             for (auto &B : F) {
+                std::set<AllocaInst*> toDelete;
                 for (auto &I : B) {
                     if (auto *CI = dyn_cast<CallInst>(&I)) {
                         errs() << "log: invoking function " << CI->getCalledFunction()->getName() << "\n";
@@ -187,7 +196,7 @@ namespace {
                         }
                     } else if (auto *AI = dyn_cast<AllocaInst>(&I)) {
                         errs() << "log: alloca instr " << *AI << "\n";
-                        addCheckAfterAllocaInst(AI);
+                        addCheckAfterAllocaInst(AI, toDelete);
                     } else if (auto *GEPI = dyn_cast<GetElementPtrInst>(&I)) {
                         errs() << "log: get element ptr instr << " << *GEPI << "\n";
                         auto ptrOperand = GEPI->getPointerOperand();
@@ -197,6 +206,9 @@ namespace {
                             ignoreList.insert(GEPI);
                         }
                     }
+                }
+                for (auto *AI : toDelete) {
+                    AI->eraseFromParent();
                 }
             }
             if (F.getName() == "main") {
