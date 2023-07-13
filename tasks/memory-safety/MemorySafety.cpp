@@ -97,27 +97,39 @@ namespace {
             builder.CreateCall(func, args);
         }
 
+        void addCheckAfterAllocaInst(AllocaInst *AI) {
+            LLVMContext &C = AI->getContext();
+            auto F = AI->getFunction();
+            DataLayout DL = F->getParent()->getDataLayout();
+
+            errs() << "log: alloca get type " << AI->getAllocatedType() << "\n";
+            unsigned long size = DL.getTypeAllocSize(AI->getAllocatedType());
+            errs() << "log: alloca elem size " << size << "\n";
+
+            FunctionCallee func = F->getParent()->getOrInsertFunction(
+                    "__runtime_stack_alloc", Type::getVoidTy(C),
+                    Type::getInt8PtrTy(C), Type::getInt64Ty(C));
+
+            errs() << "log: ready to build call instr\n";
+            IRBuilder<> builder(AI);
+            //builder.SetInsertPoint(AI);
+            errs() << "debug: ai get value name?\n";
+            auto argPtr = AI;
+            errs() << "debug: after ai get value name\n";
+            errs() << "debug: arg ptr : " << argPtr << "\n";
+            auto argSize = ConstantInt::get(Type::getInt32Ty(C), size, false);
+            std::vector<Value*> args{argPtr, argSize};
+            //auto CI = builder.CreateCall(func, args);
+            //CI->insertAfter(AI);
+            auto *CI = CallInst::Create(func, args, "", AI->getNextNode());
+            errs() << "log: call to runtime stack alloc is inserted after alloca instr\n";
+        }
+
         void transform(Function &F) {
             if (F.getName() == "main") {
                 errs() << "It's main function, add init call\n";
                 addInit(F);
             }
-            //std::set<Value*> track;
-            //errs() << "log: find all malloc value\n";
-            //for (auto &B : F) {
-            //    for (auto &I: B) {
-            //        if (auto *CI = dyn_cast<CallInst>(&I)) {
-            //            errs() << "log: invoking function " << CI->getCalledFunction()->getName() << "\n";
-            //            if (CI->getCalledFunction()->getName() == "malloc") {
-            //                errs() << "log: value name of call " << CI->getValueName() << "\n";
-            //                errs() << "log: users\n";
-            //                for (auto U: CI->users()) {
-            //                    errs() << "log: " << U << "\n";
-            //                }
-            //            }
-            //        }
-            //    }
-            //}
 
             auto ignoreList = std::set<Value*>();
             auto globals = F.getParent()->globals();
@@ -164,6 +176,9 @@ namespace {
                         } else {
                             addCheckBeforeLoadInst(LI);
                         }
+                    } else if (auto *AI = dyn_cast<AllocaInst>(&I)) {
+                        errs() << "log: alloca instr " << *AI << "\n";
+                        addCheckAfterAllocaInst(AI);
                     }
                 }
             }

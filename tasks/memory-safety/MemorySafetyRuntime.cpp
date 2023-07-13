@@ -48,6 +48,26 @@ void __runtime_check_addr(void *ptr, size_t size) {
 }
 
 __attribute__((used))
+void __runtime_stack_alloc(void *ptr, size_t size) {
+    fprintf(stderr, "log: runtime stack alloc\n");
+    fprintf(stderr, "log: mem is at %p with size %u\n", ptr, size);
+    fprintf(stderr, "log: end is %p\n", ptr + size);
+    fprintf(stderr, "log: setting shadow\n");
+    for (char *p = (char*)ptr; p < (char*)ptr + size; p += 8) {
+        fprintf(stderr, "log: current block is %p\n", p);
+        auto rest = (char*)ptr + size - p;
+        if (rest >= 8) {
+            fprintf(stderr, "log: large enough, writing 0 to shadow\n");
+            __set_shadow(p, 0);
+        } else { // rest < 8
+            fprintf(stderr, "log: less than 8, writing %u to shadow\n", (unsigned)rest);
+            __set_shadow(p, (char) rest);
+        }
+    }
+    fprintf(stderr, "log: stack alloc wrapper return\n");
+}
+
+__attribute__((used))
 void *__runtime_malloc(size_t size) {
     fprintf(stderr, "log: runtime malloc\n");
     char *mem = (char *) malloc(size);

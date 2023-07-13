@@ -1,2 +1,2 @@
 #!/bin/bash
-make -C ../../tasks/memory-safety && make all && python test-malloc.py
+make -C ../../tasks/memory-safety && make all && python test-stack.py
