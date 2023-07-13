@@ -6,6 +6,8 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 
+#include "llvm/Analysis/AliasAnalysis.h"
+
 #define DEBUG_TYPE "memory-safety"
 
 using namespace llvm;
@@ -96,20 +98,46 @@ namespace {
                 errs() << "It's main function, add init call\n";
                 addInit(F);
             }
+            std::set<Value*> track;
+            errs() << "log: find all malloc value\n";
+            for (auto &B : F) {
+                for (auto &I: B) {
+                    if (auto *CI = dyn_cast<CallInst>(&I)) {
+                        errs() << "log: invoking function " << CI->getCalledFunction()->getName() << "\n";
+                        if (CI->getCalledFunction()->getName() == "malloc") {
+                            errs() << "log: value name of call " << CI->getValueName() << "\n";
+                            errs() << "log: users\n";
+                            for (auto U: CI->users()) {
+                                errs() << "log: " << U << "\n";
+                            }
+                        }
+                    }
+                }
+            }
             for (auto &B : F) {
                 for (auto &I : B) {
                     if (auto *CI = dyn_cast<CallInst>(&I)) {
                         errs() << "log: invoking function " << CI->getCalledFunction()->getName() << "\n";
                         if (CI->getCalledFunction()->getName() == "malloc") {
+                            errs() << "log: value name of call " << CI->getValueName() << "\n";
+                            //errs() << "log: call return value " << CI->getReturnedArgOperand() << "\n";
+                            //errs() << "log: add track for " << CI->getValueName()->getValue() << "\n";
+                            errs() << "log: users\n";
+                            for (auto U : CI->users()) {
+                                errs() << "log: " << U << U->getName() << "\n";
+                            }
                             transformMalloc(*CI);
                         } else if (CI->getCalledFunction()->getName() == "free") {
                             transformFree(*CI);
                         }
                     } else if (auto *SI = dyn_cast<StoreInst>(&I)) {
-                        errs() << "log: store instr" << *SI << "\n";
+                        errs() << "log: store instr " << *SI << "\n";
+                        errs() << "log: ptr operand " << SI->getOperand(1) << "\n";
                         addCheckBeforeStoreInst(SI);
                     } else if (auto *LI = dyn_cast<LoadInst>(&I)) {
-                        errs() << "log: load instr" << *LI << "\n";
+                        errs() << "log: load instr " << *LI << "\n";
+                        errs() << "log: ptr operand " << LI->getOperand(0) << "\n";
+                        //errs() << "log: load ptr " << (unsigned long)(SI->getPointerOperand()) << "\n";
                         addCheckBeforeLoadInst(LI);
                     }
                 }
@@ -122,6 +150,12 @@ namespace {
 
         PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM) {
             errs() << "Running MemorySafetyPass on function " << F.getName() << "\n";
+
+            auto globals = F.getParent()->globals();
+            errs() << "test: get globals\n";
+            for (auto &global : globals) {
+                errs() << "test: " << global << " with name " <<  global.getName() << "\n";
+            }
 
             transform(F);
 
