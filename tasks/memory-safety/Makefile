@@ -5,8 +5,8 @@ all: cmake-build rtlib
 # Uncomment which programming language you want to use for your runtime library
 rtlib:
 	@echo "Uncomment one of the following lines to select your language"
-#rtlib: rust
-rtlib: cpp
+rtlib: rust
+#rtlib: cpp
 #rtlib: c
 
 .PHONY clean:
