@@ -140,6 +140,15 @@ namespace {
                 errs() << "test: value name value " << global.getValueName()->getValue() << "\n";
                 ignoreList.insert(global.getValueName()->getValue());
             }
+            if (F.getName() == "main") {
+                errs() << "It's main function, adding argv to ignore list\n";
+                auto argv = F.getArg(1);
+                ignoreList.insert(argv);
+                //errs() << "test: argv users\n";
+                //for (auto U : argv->users()) {
+                //    errs() << U << "\n";
+                //}
+            }
             errs() << "test: global ignore list\n";
             for (auto v : ignoreList) {
                 errs() << v << "\n";
@@ -179,6 +188,14 @@ namespace {
                     } else if (auto *AI = dyn_cast<AllocaInst>(&I)) {
                         errs() << "log: alloca instr " << *AI << "\n";
                         addCheckAfterAllocaInst(AI);
+                    } else if (auto *GEPI = dyn_cast<GetElementPtrInst>(&I)) {
+                        errs() << "log: get element ptr instr << " << *GEPI << "\n";
+                        auto ptrOperand = GEPI->getPointerOperand();
+                        errs() << "log: it's pointer operand " << ptrOperand << "\n";
+                        if (ignoreList.find(ptrOperand) != ignoreList.end()) {
+                            errs() << "log: ptr operand is in ignore list, adding GEPI to ignore list\n";
+                            ignoreList.insert(GEPI);
+                        }
                     }
                 }
             }
