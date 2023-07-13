@@ -40,7 +40,7 @@ void __runtime_init() {
 __attribute__((used))
 void __runtime_cleanup() {
     //log("//log: shadow free\n");
-    __shadow.clear();
+    //__shadow.clear();
 }
 
 __attribute__((used))
@@ -82,9 +82,9 @@ __attribute__((used))
 void *__runtime_malloc(size_t size) {
     //log("//log: runtime malloc\n");
     char *mem = (char *) malloc(size);
-    if (mem == nullptr) {
-        //log("//log: malloc return nullptr\n");
-    }
+    //if (mem == nullptr) {
+    //    //log("//log: malloc return nullptr\n");
+    //}
     //log("//log: mem is at %p with size %u\n", mem, size);
     //log("//log: end is %p\n", mem + size);
     //log("//log: setting shadow\n");
